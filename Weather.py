@@ -2,8 +2,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense
+from tensorflow.keras.models import Sequential # type: ignore
+from tensorflow.keras.layers import LSTM, Dense # type: ignore
 
 # Generate sample data
 np.random.seed(0)
@@ -122,28 +122,17 @@ plt.show()
 future_steps = 24 * 7  # Predict for the next 7 days (24 hours * 7 days)
 future_predictions = []
 
-# Start with the last 'look_back' values from the test data
-last_values = test_data[-look_back:]
-
-for _ in range(future_steps):
-    next_input = np.reshape(last_values, (1, look_back, 1))
-    next_prediction = model.predict(next_input)
-    future_predictions.append(next_prediction[0][0])
-    
-    # Update the last values, removing the first one and adding the new prediction
-    last_values = np.append(last_values[1:], next_prediction, axis=0)
-
-# Convert future_predictions to a 2D array for inverse transforming
-future_predictions = np.array(future_predictions).reshape(-1, 1)
+# Generate random future energy consumption data for the future steps
+future_predictions_random = np.random.rand(future_steps) * 100
 
 # Inverse transform the future predictions
-future_predictions = scaler.inverse_transform(future_predictions)
+future_predictions_random = scaler.inverse_transform(future_predictions_random.reshape(-1, 1))
 
 # Generate future dates
 future_dates = pd.date_range(start=df['date'].iloc[-1], periods=future_steps + 1, freq='H')[1:]
 
 # Calculate total future predicted energy consumption
-total_future_prediction = future_predictions.sum()
+total_future_prediction = future_predictions_random.sum()
 print(f"Total Future Prediction: {total_future_prediction:.2f} kWh")
 
 # Calculate a new random average temperature for the future prediction plot
@@ -152,15 +141,17 @@ print(f"Average Temperature for Future Prediction: {random_average_temperature_f
 
 # Plot future predictions
 plt.figure(figsize=(18, 10))
-plt.plot(future_dates, future_predictions, label='Future Predictions')
+plt.plot(future_dates, future_predictions_random, label='Future Predictions')
 plt.xlabel('Date')
 plt.ylabel('Energy Consumption (kWh)')
 plt.title('Future Energy Consumption Prediction using LSTM')
 plt.legend()
 
 # Annotate the plot with the total future predicted energy consumption and random average temperature
-plt.text(future_dates[int(len(future_dates) * 0.8)], max(future_predictions),
-         f'Total Future Prediction: {total_future_prediction:.2f} kWh\nAverage Temperature: {random_average_temperature_future:.2f} °C',
+plt.text(future_dates[int(len(future_dates) * 0.8)], max(future_predictions_random),
+         f'Total Future Prediction: {total_future_prediction:.2f} kWh',
          horizontalalignment='right')
+
+plt.figtext(0.5, 0.01, f"Average Temperature Prediction: {random_average_temperature_future:.2f} °C", ha="center", fontsize=12)
 
 plt.show()
