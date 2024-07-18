@@ -1,23 +1,27 @@
+import requests
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
-from tensorflow.keras.models import Sequential # type: ignore
-from tensorflow.keras.layers import LSTM, Dense # type: ignore
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense
+from sklearn.ensemble import IsolationForest
+from datetime import datetime, timedelta
+import matplotlib.dates as mdates
 
 # Generate sample data
 np.random.seed(0)
 date_rng = pd.date_range(start='1/1/2024', end='1/31/2024', freq='H')
 df = pd.DataFrame(date_rng, columns=['date'])
-df['energy_consumption'] = np.random.rand(len(df)) * 100
-df['temperature'] = np.random.rand(len(df)) * 30  # Simulating temperature data
+df['energy_consumption'] = np.random.uniform(10, 50, len(df))  # Updated range
+df['temperature'] = np.random.uniform(10, 50, len(df))  # Simulating temperature data
 
 # Calculate total energy consumption
 total_energy_consumption = df['energy_consumption'].sum()
 print(f"Total Energy Consumption: {total_energy_consumption:.2f} kWh")
 
 # Calculate a random average temperature
-random_average_temperature = np.random.rand() * 30
+random_average_temperature = np.random.uniform(10, 50)
 print(f"Average Temperature: {random_average_temperature:.2f} °C")
 
 # Plot the data
@@ -88,7 +92,7 @@ print(f"Total Training Prediction: {total_train_prediction:.2f} kWh")
 print(f"Total Test Prediction: {total_test_prediction:.2f} kWh")
 
 # Calculate a new random average temperature for the prediction plot
-random_average_temperature_prediction = np.random.rand() * 30
+random_average_temperature_prediction = np.random.uniform(10, 50)
 print(f"Average Temperature for Prediction: {random_average_temperature_prediction:.2f} °C")
 
 # Plot the results
@@ -123,7 +127,7 @@ future_steps = 24 * 7  # Predict for the next 7 days (24 hours * 7 days)
 future_predictions = []
 
 # Generate random future energy consumption data for the future steps
-future_predictions_random = np.random.rand(future_steps) * 100
+future_predictions_random = np.random.rand(future_steps) * 40 + 10  # Range 10 to 50 kWh
 
 # Inverse transform the future predictions
 future_predictions_random = scaler.inverse_transform(future_predictions_random.reshape(-1, 1))
@@ -155,3 +159,165 @@ plt.text(future_dates[int(len(future_dates) * 0.8)], max(future_predictions_rand
 plt.figtext(0.5, 0.01, f"Average Temperature Prediction: {random_average_temperature_future:.2f} °C", ha="center", fontsize=12)
 
 plt.show()
+
+# Anomaly Detection
+isolation_forest = IsolationForest(contamination=0.05)
+df['anomaly'] = isolation_forest.fit_predict(df[['energy_consumption']])
+df['anomaly'] = df['anomaly'].map({1: 0, -1: 1})
+
+# Plot anomalies
+plt.figure(figsize=(16, 8))
+plt.plot(df['date'], df['energy_consumption'], label='Energy Consumption')
+plt.scatter(df[df['anomaly'] == 1]['date'], df[df['anomaly'] == 1]['energy_consumption'], color='red', label='Anomaly')
+plt.xlabel('Date')
+plt.ylabel('Energy Consumption (kWh)')
+plt.title('Energy Consumption with Anomaly Detection')
+plt.legend()
+plt.show()
+
+# Personalized Energy Efficiency Recommendations (Dummy Implementation)
+def recommend_energy_saving(df):
+    recommendations = []
+    avg_consumption = df['energy_consumption'].mean()
+    if avg_consumption > 30:
+        recommendations.append("Consider using energy-efficient appliances.")
+    if avg_consumption > 40:
+        recommendations.append("Optimize your thermostat settings.")
+    if len(recommendations) == 0:
+        recommendations.append("Your energy usage is optimal.")
+    return recommendations
+
+recommendations = recommend_energy_saving(df)
+for rec in recommendations:
+    print(rec)
+
+# Implement Energy Automation (Dummy Implementation)
+def automate_energy(df, price_limit):
+    actions = []
+    for i in range(len(df)):
+        if df['energy_consumption'][i] > price_limit:
+            actions.append(f"At {df['date'][i]}, reduce usage of high-energy appliances.")
+    return actions
+
+automations = automate_energy(df, 35)
+for auto in automations:
+    print(auto)
+
+# Detailed Energy Audits and Cost-Benefit Analysis Tools (Dummy Implementation)
+def energy_audit(df):
+    zones = ['Zone 1', 'Zone 2', 'Zone 3']
+    audit = {zone: df['energy_consumption'].sample(len(df)//len(zones)).sum() for zone in zones}
+    return audit
+
+audit = energy_audit(df)
+for zone, consumption in audit.items():
+    print(f"{zone} consumed {consumption:.2f} kWh")
+
+def cost_benefit_analysis(df, upgrade_cost, savings_per_kwh):
+    total_savings = df['energy_consumption'].sum() * savings_per_kwh
+    roi = total_savings / upgrade_cost
+    return total_savings, roi
+
+savings, roi = cost_benefit_analysis(df, 5000, 0.10)
+print(f"Total Savings: ${savings:.2f}, ROI: {roi:.2f}")
+
+# Fetch current hour average price
+def get_current_price():
+    response = requests.get('https://hourlypricing.comed.com/api?type=currenthouraverage&format=json')
+    current_price_data = response.json()
+    return float(current_price_data[0]['price'])
+
+# Fetch historical 5-minute prices for the last 24 hours
+def get_historical_prices():
+    response = requests.get('https://hourlypricing.comed.com/api?type=5minutefeed&format=json')
+    historical_data = response.json()
+    prices = [float(entry['price']) for entry in historical_data]
+    timestamps = [entry['millisUTC'] for entry in historical_data]
+    return pd.DataFrame({'timestamp': pd.to_datetime(timestamps, unit='ms'), 'price': prices})
+
+# Prepare data for LSTM
+def prepare_data(prices, look_back=12):
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    scaled_prices = scaler.fit_transform(prices.reshape(-1, 1))
+
+    X, Y = [], []
+    for i in range(len(scaled_prices) - look_back):
+        X.append(scaled_prices[i:i + look_back, 0])
+        Y.append(scaled_prices[i + look_back, 0])
+    return np.array(X), np.array(Y), scaler
+
+# Build and train the LSTM model
+def train_lstm(X, Y):
+    model = Sequential()
+    model.add(LSTM(50, return_sequences=True, input_shape=(X.shape[1], 1)))
+    model.add(LSTM(50))
+    model.add(Dense(1))
+    model.compile(optimizer='adam', loss='mean_squared_error')
+    model.fit(X, Y, epochs=20, batch_size=32, verbose=1)
+    return model
+
+# Predict future prices
+def predict_future_prices(model, scaler, historical_prices, n_future=24):
+    future_predictions = []
+    current_input = historical_prices.reshape((1, historical_prices.shape[0], 1))
+
+    for _ in range(n_future):
+        prediction = model.predict(current_input, verbose=0)
+        future_predictions.append(prediction[0, 0])
+        prediction = prediction.reshape(1, 1, 1)
+        current_input = np.append(current_input[:, 1:, :], prediction, axis=1)
+
+    future_predictions = scaler.inverse_transform(np.array(future_predictions).reshape(-1, 1))
+    return future_predictions.flatten()
+
+# Main script
+if __name__ == "__main__":
+    # Get current and historical prices
+    current_price = get_current_price()
+    historical_prices_df = get_historical_prices()
+    
+    # Prepare data
+    historical_prices = historical_prices_df['price'].values
+    X, Y, scaler = prepare_data(historical_prices)
+    X = np.reshape(X, (X.shape[0], X.shape[1], 1))
+    
+    # Train LSTM model
+    model = train_lstm(X, Y)
+    
+    # Predict future prices
+    future_predictions = predict_future_prices(model, scaler, historical_prices[-12:])
+    
+    # Plot results
+    plt.figure(figsize=(14, 7))
+    plt.plot(historical_prices_df['timestamp'], historical_prices, label='Historical Prices')
+    
+    # Generate future timestamps for prediction plot
+    future_timestamps = [historical_prices_df['timestamp'].iloc[-1] + timedelta(minutes=5 * (i+1)) for i in range(len(future_predictions))]
+    
+    plt.plot(future_timestamps, future_predictions, label='Predicted Prices', color='red')
+    
+    # Plot vertical line for current time
+    plt.axvline(x=historical_prices_df['timestamp'].iloc[-1], color='gray', linestyle='--', label='Current Time')
+    
+    plt.xlabel('Time (hh:mm AM/PM)')
+    plt.xticks(rotation=45)
+    plt.ylabel('Price (cents per kWh)')
+    plt.title('Electricity Price Prediction')
+    plt.legend()
+    
+    # Set major formatter for x-axis to show time in 12-hour format
+    ax = plt.gca()
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%I:%M %p'))
+
+    plt.tight_layout()
+    plt.show()
+
+    # Decision making based on price
+    if current_price < np.mean(future_predictions):
+        print("Current price is low. You may use high-energy appliances now.")
+    else:
+        print("Current price is high. Consider reducing energy usage or shifting it to later.")
+
+    # Print current price and predictions
+    print(f"Current Hour Average Price: {current_price} cents per kWh")
+    print(f"Predicted Prices: {future_predictions.flatten()} cents per kWh")
